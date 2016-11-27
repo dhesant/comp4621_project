@@ -145,8 +145,6 @@ public class ftpWorker extends Thread {
 		}
 		
 		else {
-			sendDebugMsg("Autenticated Command: " + cmd + " Args: " + args);
-
 			switch (cmd) {
 			case "ABOR":
 				aborHandler(args);
@@ -210,10 +208,6 @@ public class ftpWorker extends Thread {
 
 			case "RNTO":
 				rntoHandler(args);
-				break;
-
-			case "SITE":
-				siteHandler(args);
 				break;
 
 			case "SIZE":
@@ -350,7 +344,30 @@ public class ftpWorker extends Thread {
 	}
 
 	private void deleHandler(String str) {
+		if (str == null) {
+			sendCtrlMsg("501 No filename given");
+		}
+		else {
+			String filename = currentDir;
+			if (currentDir.endsWith("/")) {
+				filename = filename + str;
+			}
+			else {
+				filename = filename + fileSeparator + str;
+			}
 
+			File f = new File(jailedDir + filename);
+
+			if(f.exists() && f.isFile()) {
+				f.delete();
+				sendCtrlMsg("250 File removed");
+
+			}
+
+			else {
+				sendCtrlMsg("550 File does not exist");
+			}
+		}
 	}
 
 	private void listHandler(String str) {
@@ -631,12 +648,31 @@ public class ftpWorker extends Thread {
 
 	}
 
-	private void siteHandler(String str) {
-
-	}
-
 	private void sizeHandler(String str) {
+		if (str == null) {
+			sendCtrlMsg("501 No filename given");
+		}
 
+		else {
+			String filename = currentDir;
+			if (currentDir.endsWith("/")) {
+				filename = filename + str;
+			}
+			else {
+				filename = filename + fileSeparator + str;
+			}
+
+			File f = new File(jailedDir + filename);
+
+			if(f.exists() && f.isFile()) {
+				long bytes = f.length();
+				sendCtrlMsg("213 " + Long.toString(bytes));
+			}
+
+			else {
+				sendCtrlMsg("550 File does not exist");
+			}
+		}
 	}
 
 	private void storHandler(String str) {
