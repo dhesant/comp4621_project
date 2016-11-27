@@ -18,6 +18,8 @@ import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.text.SimpleDateFormat;
+
 
 public class ftpWorker extends Thread {
 	// Enable debugging mode
@@ -126,10 +128,14 @@ public class ftpWorker extends Thread {
 			quitHandler(args);
 			break;
 
+		case "REIN":
+			reinHandler(args);
+			break;
+
 		case "USER":
 			userHandler(args);
 			break;
-
+			
 		default:
 			runCmdAuth(cmd, args);
 			break;
@@ -192,6 +198,10 @@ public class ftpWorker extends Thread {
 
 			case "QUIT":
 				quitHandler(args);
+				break;
+
+			case "REIN":
+				reinHandler(args);
 				break;
 
 			case "RETR":
@@ -361,7 +371,6 @@ public class ftpWorker extends Thread {
 			if(f.exists() && f.isFile()) {
 				f.delete();
 				sendCtrlMsg("250 File removed");
-
 			}
 
 			else {
@@ -375,7 +384,29 @@ public class ftpWorker extends Thread {
 	}
 
 	private void mdtmHandler(String str) {
+		if (str == null) {
+			sendCtrlMsg("501 No filename given");
+		}
+		else {
+			String filename = currentDir;
+			if (currentDir.endsWith("/")) {
+				filename = filename + str;
+			}
+			else {
+				filename = filename + fileSeparator + str;
+			}
 
+			File f = new File(jailedDir + filename);
+
+			if(f.exists() && f.isFile()) {
+				SimpleDateFormat sdf = new SimpleDateFormat("yyyyMMddHHmmss");
+				sendCtrlMsg("213 " + sdf.format(f.lastModified()));
+			}
+
+			else {
+				sendCtrlMsg("550 File does not exist");
+			}
+		}
 	}
 
 	private void mkdHandler(String str) {
@@ -509,6 +540,11 @@ public class ftpWorker extends Thread {
 		sendCtrlMsg("221 Closing connection");
 		exitFlag = true;
 	}
+	
+	private void reinHandler(String str) {
+		currentUserStat = userStat.ANONYMOUS;
+		sendCtrlMsg("220 OK");
+	}
 
 	private void retrHandler(String str) {
 		if (str == null) {
@@ -527,6 +563,10 @@ public class ftpWorker extends Thread {
 			
 			if(!f.exists()) {
 				sendCtrlMsg("550 File does not exist");
+			}
+			
+			else if (dataConnection == null || dataConnection.isClosed()) {
+				sendCtrlMsg("425 No data connection was established");
 			}
 			
 			else {
@@ -608,6 +648,7 @@ public class ftpWorker extends Thread {
 					}
                     sendCtrlMsg("226 File transfer successful. Closing data connection.");
 				}
+				closeDataConnection();
 			}
 		}
 	}
@@ -694,6 +735,10 @@ public class ftpWorker extends Thread {
 				sendCtrlMsg("550 File already exists");
 			}
 			
+			else if (dataConnection == null || dataConnection.isClosed()) {
+				sendCtrlMsg("425 No data connection was established");
+			}
+			
 			else {
 				// Binary mode
 				if (binaryFlag) {
@@ -773,6 +818,7 @@ public class ftpWorker extends Thread {
 					}
                     sendCtrlMsg("226 File transfer successful. Closing data connection.");
 				}
+				closeDataConnection();
 			}
 		}
 	}
