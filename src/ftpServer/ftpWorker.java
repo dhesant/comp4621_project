@@ -9,7 +9,7 @@ package ftpServer;
 //import java.io.BufferedInputStream;
 //import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
-//import java.io.File;
+import java.io.File;
 //import java.io.FileInputStream;
 //import java.io.FileOutputStream;
 //import java.io.FileReader;
@@ -29,7 +29,7 @@ public class ftpWorker extends Thread {
 	}
 
 	// Path variables
-	private String jailedDir = "~/ftp_share";
+	private String jailedDir = "/home/dhesant/ftp_share";
 	private String currentDir = "/";
 	private String fileSeparator = "/";			
 	
@@ -50,7 +50,7 @@ public class ftpWorker extends Thread {
 	private String password = "comp4621";
 
 	private boolean exitFlag = false;
-
+	private boolean binaryFlag = false;
 
 	public ftpWorker(Socket client, int dataPort) {
 		super();
@@ -215,6 +215,16 @@ public class ftpWorker extends Thread {
 			dataOut.println(msg);
 		}
 	}
+	
+	private void sendDataMsgRaw(String msg) {
+		if (dataConnection == null || dataConnection.isClosed()) {
+			sendCtrlMsg("425 No data connetcion was establised");
+			sendDebugMsg("Failed to send data message, no data connetcion was establised");
+		}
+		else {
+			dataOut.print(msg);
+		}
+	}
 
 	private void sendDebugMsg(String msg) {
 		if (enableDebug) {
@@ -236,7 +246,7 @@ public class ftpWorker extends Thread {
 		}
 	}
 
-	private void openActiveDataConncetion(String ipAddr, int port) {
+	private void openActiveDataConnection(String ipAddr, int port) {
 		try {
 			dataConnection = new Socket(ipAddr, port);
 			dataOut = new PrintWriter(dataConnection.getOutputStream(), true);
@@ -264,13 +274,42 @@ public class ftpWorker extends Thread {
 			sendDebugMsg("Could not close data connection");
 		}
 	}
-
+	
 	private void aborHandler(String str) {
 
 	}
 
 	private void cwdHandler(String str) {
+		String targetDir = currentDir;
 
+		if (str.equals("..")) {
+			int index = targetDir.lastIndexOf(fileSeparator);
+			if (index > 0) {
+				targetDir = targetDir.substring(0, index);
+			}
+			else {
+				targetDir = "/";
+			}
+		}
+
+		else if ((str != null) && (!str.equals("."))) {
+			if (currentDir.endsWith("/")) {
+				targetDir = targetDir + str;
+			}
+			else {
+				targetDir = targetDir + fileSeparator + str;
+			}
+		}
+
+		File f = new File(jailedDir + targetDir);
+
+		if (f.exists() && f.isDirectory()) {
+			currentDir = targetDir;
+			sendCtrlMsg("250 " + currentDir);
+		}
+		else {
+			sendCtrlMsg("550 " + targetDir + ": Directory not found");
+		}
 	}
 
 	private void deleHandler(String str) {
@@ -286,11 +325,88 @@ public class ftpWorker extends Thread {
 	}
 
 	private void mkdHandler(String str) {
+		if (str != null && str.matches("^[a-zA-Z0-9]+$")) {
+			String targetDir = currentDir;
 
+			if (currentDir.endsWith("/")) {
+				targetDir = targetDir + str;
+			}
+			else {
+				targetDir = targetDir + fileSeparator + str;
+			}
+
+			File newDir = new File(jailedDir + targetDir);
+
+			if(!newDir.mkdir()) {
+				sendCtrlMsg("550 Failed to create directory");
+				sendDebugMsg("Failed to create new directory " + jailedDir + targetDir);
+			}
+
+			else {
+				sendCtrlMsg("250 Directory successfully created");
+			}
+		}
+
+		else {
+			sendCtrlMsg("550 Invalid name");
+		}
 	}
 
 	private void nlstHandler(String str) {
+		if (dataConnection == null || dataConnection.isClosed()) {
+			sendCtrlMsg("425 No data connection was established");
+		}
+		
+		else {
+			String[] lsDir = nlstHelper(str);
 
+			if (lsDir == null) {
+				sendCtrlMsg("550 File does not exist.");
+			}
+			
+			else {
+				sendCtrlMsg("125 Opening ASCII mode data connection for file list.");
+
+				for (int i = 0; i < lsDir.length; i++) {
+					sendDataMsgRaw(lsDir[i] + "\r\n");
+				}
+
+				sendCtrlMsg("226 Transfer complete.");
+				closeDataConnection();
+			}
+		}
+	}
+	
+	private String[] nlstHelper(String str) {
+		String targetDir = currentDir;
+		
+		if (str != null) {
+			if (currentDir.endsWith("/")) {
+				targetDir = targetDir + str;
+			}
+			else {
+				targetDir = targetDir + fileSeparator + str;
+			}
+		}
+
+
+		// Now get a File object, and see if the name we got exists and is a
+		// directory.
+		File f = new File(jailedDir + targetDir);
+
+		if (f.exists() && f.isDirectory()) {
+			return f.list();
+		}
+		
+		else if (f.exists() && f.isFile()) {
+			String[] tmp = new String[1];
+			tmp[0] = f.getName();
+			return tmp;
+		}
+		
+		else {
+			return null;
+		}
 	}
 
 	private void passHandler(String str) {
@@ -320,7 +436,15 @@ public class ftpWorker extends Thread {
 
 
 	private void portHandler(String str) {
-
+        // Extract IP address and port number from arguments
+        String[] strSplit = str.split(",");
+        String ipAddr = strSplit[0] + "." + strSplit[1] + "." + strSplit[2] + "." + strSplit[3];
+    
+        int port = Integer.parseInt(strSplit[4])*256 + Integer.parseInt(strSplit[5]);
+        
+        // Initiate data connection to client
+        openActiveDataConnection(ipAddr, port);
+        sendCtrlMsg("200 Command OK");
 	}
 
 	private void pwdHandler(String str) {
@@ -337,7 +461,31 @@ public class ftpWorker extends Thread {
 	}
 
 	private void rmdHandler(String str) {
+		if (str != null && str.matches("^[a-zA-Z0-9]+$")) {
+			String targetDir = currentDir;
 
+			if (currentDir.endsWith("/")) {
+				targetDir = targetDir + str;
+			}
+			else {
+				targetDir = targetDir + fileSeparator + str;
+			}
+
+			File newDir = new File(jailedDir + targetDir);
+
+			if (newDir.exists() && newDir.isDirectory()) {
+				newDir.delete();
+				sendCtrlMsg("250 Directory removed");
+			}
+			else {
+				sendCtrlMsg("550 Requested action not taken. Directory unavailable.");
+			}
+
+		}
+
+		else {
+			sendCtrlMsg("550 Invalid name");
+		}
 	}
 
 	private void rnfrHandler(String str) {
@@ -361,7 +509,19 @@ public class ftpWorker extends Thread {
 	}
 
 	private void typeHandler(String str) {
+		if(str.toUpperCase().equals("A") || str.toUpperCase().equals("A N")) {
+			binaryFlag = false;
+			sendCtrlMsg("200 OK");
+		}
 
+		else if(str.toUpperCase().equals("I") || str.toUpperCase().equals("L 8")) {
+			binaryFlag = true;
+			sendCtrlMsg("200 OK");
+		}
+
+		else {
+			sendCtrlMsg("504 Not OK");;
+		}
 	}
 
 	private void userHandler(String str) {
@@ -369,9 +529,11 @@ public class ftpWorker extends Thread {
 			sendCtrlMsg("331 User name okay, need password");
 			currentUserStat = userStat.AUTHENTICATING;
 		}
+		
 		else if (currentUserStat == userStat.AUTHENTICATED) {
 			sendCtrlMsg("530 User already logged in");
 		}
+		
 		else {
 			sendCtrlMsg("530 Not logged in");
 		}
