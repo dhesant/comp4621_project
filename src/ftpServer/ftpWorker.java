@@ -51,8 +51,10 @@ public class ftpWorker extends Thread {
 	private String username = "comp4621";
 	private String password = "comp4621";
 
+	// flags and inter-function variables
 	private boolean exitFlag = false;
 	private boolean binaryFlag = false;
+	private File renameFile;
 
 	public ftpWorker(Socket client, int dataPort) {
 		super();
@@ -682,11 +684,64 @@ public class ftpWorker extends Thread {
 	}
 
 	private void rnfrHandler(String str) {
+		if (str == null) {
+			sendCtrlMsg("501 No filename given");
+		}
+		else {
+			String filename = currentDir;
+			if (currentDir.endsWith("/")) {
+				filename = filename + str;
+			}
+			else {
+				filename = filename + fileSeparator + str;
+			}
 
+			renameFile = new File(jailedDir + filename);
+
+			if(renameFile.exists() && renameFile.isFile()) {
+				sendCtrlMsg("220 OK");
+			}
+
+			else {
+				renameFile = null;
+				sendCtrlMsg("550 File does not exist");
+			}
+		}
 	}
 
 	private void rntoHandler(String str) {
+		if (str == null) {
+			sendCtrlMsg("501 No filename given");
+		}
+		
+		else if (renameFile == null) {	
+			sendCtrlMsg("550 File does not exist");
+		}
+		
+		else {
+			String filename = currentDir;
+			if (currentDir.endsWith("/")) {
+				filename = filename + str;
+			}
+			else {
+				filename = filename + fileSeparator + str;
+			}
 
+			File f = new File(jailedDir + filename);
+
+			if(!f.exists()) {
+				if(renameFile.renameTo(f)) {
+					sendCtrlMsg("213 Renamed " + renameFile.getName() + " to " + f.getName());
+				}
+				else {
+					sendCtrlMsg("550 Cannot rename file");
+				}
+			}
+
+			else {
+				sendCtrlMsg("550 File already exists");
+			}
+		}
 	}
 
 	private void sizeHandler(String str) {
