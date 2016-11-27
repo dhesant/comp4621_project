@@ -6,13 +6,13 @@
 
 package ftpServer;
 
-//import java.io.BufferedInputStream;
-//import java.io.BufferedOutputStream;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
-//import java.io.FileInputStream;
-//import java.io.FileOutputStream;
-//import java.io.FileReader;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
@@ -457,7 +457,105 @@ public class ftpWorker extends Thread {
 	}
 
 	private void retrHandler(String str) {
+		if (str == null) {
+			sendCtrlMsg("501 No filename given");
+		}
+		else {
+			String filename = currentDir;
+			if (currentDir.endsWith("/")) {
+				filename = filename + str;
+			}
+			else {
+				filename = filename + fileSeparator + str;
+			}
+			
+			File f = new File(jailedDir + filename);
+			
+			if(!f.exists()) {
+				sendCtrlMsg("550 File does not exist");
+			}
+			
+			else {
+				// Binary mode
+				if (binaryFlag) {
+					BufferedInputStream fIn = null;
+					BufferedOutputStream fOut = null;
+					
+					sendCtrlMsg("150 Opening binary mode data connection for requested file " + f.getName());
 
+					try {
+						fIn = new BufferedInputStream(new FileInputStream(f));
+						fOut = new BufferedOutputStream(dataConnection.getOutputStream());
+					}
+					catch (Exception e) {
+						sendDebugMsg("Cannot open file streams for file " + filename);
+					}
+
+					byte[] buffer = new byte[1024];
+					int l = 0;
+
+					try {
+						while ((l = fIn.read(buffer,0,1024)) != -1) {
+							fOut.write(buffer,0,l);
+						}
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not read or write to file " + filename);
+					}
+
+					//close streams
+					try {
+						fIn.close();
+						fOut.close();
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not close file streams for file " + filename);
+					}
+
+					sendCtrlMsg("226 File transfer successful. Closing data connection.");
+				}
+				
+				// ASCII mode
+				else {
+					sendCtrlMsg("150 Opening ASCII mode data connection for file " + f.getName());
+					
+					BufferedReader rIn = null;
+					PrintWriter rOut = null;
+					
+					try {
+						rIn = new BufferedReader(new FileReader(f));
+						rOut = new PrintWriter(dataConnection.getOutputStream(), true);						
+					}
+					catch (IOException e) {
+						sendDebugMsg("Cannot open file streams for file " + filename);
+					}
+					
+					String buffer;
+					
+					try {
+						while ((buffer = rIn.readLine()) != null) {
+							rOut.println(buffer);
+						}
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not read or write to file " + filename);
+					}
+					
+					try {
+						rIn.close();
+						rOut.close();
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not close file streams for file " + filename);
+					}
+                    sendCtrlMsg("226 File transfer successful. Closing data connection.");
+				}
+			}
+		}
 	}
 
 	private void rmdHandler(String str) {
@@ -505,7 +603,105 @@ public class ftpWorker extends Thread {
 	}
 
 	private void storHandler(String str) {
+		if (str == null) {
+			sendCtrlMsg("501 No filename given");
+		}
+		else {
+			String filename = currentDir;
+			if (currentDir.endsWith("/")) {
+				filename = filename + str;
+			}
+			else {
+				filename = filename + fileSeparator + str;
+			}
+			
+			File f = new File(jailedDir + filename);
+			
+			if(f.exists()) {
+				sendCtrlMsg("550 File already exists");
+			}
+			
+			else {
+				// Binary mode
+				if (binaryFlag) {
+					BufferedInputStream fIn = null;
+					BufferedOutputStream fOut = null;
+					
+					sendCtrlMsg("150 Opening binary mode data connection for requested file " + f.getName());
 
+					try {
+						fIn = new BufferedInputStream(dataConnection.getInputStream());
+						fOut = new BufferedOutputStream(new FileOutputStream(f));
+					}
+					catch (Exception e) {
+						sendDebugMsg("Cannot open file streams for file " + filename);
+					}
+
+					byte[] buffer = new byte[1024];
+					int l = 0;
+
+					try {
+						while ((l = fIn.read(buffer,0,1024)) != -1) {
+							fOut.write(buffer,0,l);
+						}
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not read or write to file " + filename);
+					}
+
+					//close streams
+					try {
+						fIn.close();
+						fOut.close();
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not close file streams for file " + filename);
+					}
+
+					sendCtrlMsg("226 File transfer successful. Closing data connection.");
+				}
+				
+				// ASCII mode
+				else {
+					sendCtrlMsg("150 Opening ASCII mode data connection for file " + f.getName());
+					
+					BufferedReader rIn = null;
+					PrintWriter rOut = null;
+					
+					try {
+						rIn = new BufferedReader(new InputStreamReader(dataConnection.getInputStream()));
+						rOut = new PrintWriter(new FileOutputStream(f), true);						
+					}
+					catch (IOException e) {
+						sendDebugMsg("Cannot open file streams for file " + filename);
+					}
+					
+					String buffer;
+					
+					try {
+						while ((buffer = rIn.readLine()) != null) {
+							rOut.println(buffer);
+						}
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not read or write to file " + filename);
+					}
+					
+					try {
+						rIn.close();
+						rOut.close();
+					}
+					catch (IOException e) {
+						e.printStackTrace();
+						sendDebugMsg("Could not close file streams for file " + filename);
+					}
+                    sendCtrlMsg("226 File transfer successful. Closing data connection.");
+				}
+			}
+		}
 	}
 
 	private void typeHandler(String str) {
