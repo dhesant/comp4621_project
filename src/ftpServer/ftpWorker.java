@@ -110,34 +110,6 @@ public class ftpWorker extends Thread {
 		sendDebugMsg("Command: " + cmd + " Args: " + args);
 
 		switch (cmd) {
-		case "ABOR":
-			aborHandler(args);
-			break;
-
-		case "CWD":
-			cwdHandler(args);
-			break;
-
-		case "DELE":
-			deleHandler(args);
-			break;
-
-		case "LIST":
-			listHandler(args);
-			break;
-
-		case "MDTM":
-			mdtmHandler(args);
-			break;
-
-		case "MKD":
-			mkdHandler(args);
-			break;
-
-		case "NLST":
-			nlstHandler(args);
-			break;
-
 		case "PASS":
 			passHandler(args);
 			break;
@@ -150,44 +122,8 @@ public class ftpWorker extends Thread {
 			portHandler(args);
 			break;
 
-		case "PWD":
-			pwdHandler(args);
-			break;
-
 		case "QUIT":
 			quitHandler(args);
-			break;
-
-		case "RETR":
-			retrHandler(args);
-			break;
-
-		case "RMD":
-			rmdHandler(args);
-			break;
-
-		case "RNFR":
-			rnfrHandler(args);
-			break;
-
-		case "RNTO":
-			rntoHandler(args);
-			break;
-
-		case "SITE":
-			siteHandler(args);
-			break;
-
-		case "SIZE":
-			sizeHandler(args);
-			break;
-
-		case "STOR":
-			storHandler(args);
-			break;
-
-		case "TYPE":
-			typeHandler(args);
 			break;
 
 		case "USER":
@@ -195,13 +131,114 @@ public class ftpWorker extends Thread {
 			break;
 
 		default:
-			sendCtrlMsg("501 Unknown command");
+			runCmdAuth(cmd, args);
 			break;
 		}
 
 		return true;
 	}
 
+	private void runCmdAuth(String cmd, String args) {
+		if (currentUserStat != userStat.AUTHENTICATED) {
+			sendCtrlMsg("530 Not Logged In");
+			sendDebugMsg("User not logged in");
+		}
+		
+		else {
+			sendDebugMsg("Autenticated Command: " + cmd + " Args: " + args);
+
+			switch (cmd) {
+			case "ABOR":
+				aborHandler(args);
+				break;
+
+			case "CWD":
+				cwdHandler(args);
+				break;
+
+			case "DELE":
+				deleHandler(args);
+				break;
+
+			case "LIST":
+				listHandler(args);
+				break;
+
+			case "MDTM":
+				mdtmHandler(args);
+				break;
+
+			case "MKD":
+				mkdHandler(args);
+				break;
+
+			case "NLST":
+				nlstHandler(args);
+				break;
+
+			case "PASS":
+				passHandler(args);
+				break;
+
+			case "PASV":
+				pasvHandler(args);
+				break;
+
+			case "PORT":
+				portHandler(args);
+				break;
+
+			case "PWD":
+				pwdHandler(args);
+				break;
+
+			case "QUIT":
+				quitHandler(args);
+				break;
+
+			case "RETR":
+				retrHandler(args);
+				break;
+
+			case "RMD":
+				rmdHandler(args);
+				break;
+
+			case "RNFR":
+				rnfrHandler(args);
+				break;
+
+			case "RNTO":
+				rntoHandler(args);
+				break;
+
+			case "SITE":
+				siteHandler(args);
+				break;
+
+			case "SIZE":
+				sizeHandler(args);
+				break;
+
+			case "STOR":
+				storHandler(args);
+				break;
+
+			case "TYPE":
+				typeHandler(args);
+				break;
+
+			case "USER":
+				userHandler(args);
+				break;
+
+			default:
+				sendCtrlMsg("501 Unknown command");
+				break;
+			}
+		}
+	}
+	
 	private void sendCtrlMsg(String msg) {
 		ctrlOut.println(msg);
 	}
