@@ -18,15 +18,118 @@
 
 \begin{document}
 \maketitle
+\pagenumbering{roman}
+\tableofcontents
+\clearpage
+\pagenumbering{arabic}
 
-\section{Code Structure}
+\section{Structure}
+The FTP Server is structured using two clauses, a ftpServer class, and a ftpWorker class. The ftpServer class acts as the main listener on the FTP port, which is currently set to port 2121. The ftpServer will listen for a new connection to the control port, and upon receiving a connection, pass the newly created socket to a new instance of the ftpWorker class. The ftpWorker class extends on the Thread class, and acts as the FTP server for each connection.
 
-\section{Code Mechanisms}
+\subsection{ftpServer}
+The ftpServer class is structured as follows, the main function starts a new instance of the ftpServer class, which is what runs when the program is executed. the ftpServer attempts to open a ServerSocket on the designated control port, in this case, port 2121. The server then enters a while loop listening for new connections on the ServerSocket, and upon receiving one, a new ftpWorker instance is created, passing the newly created Socket to the ftpWorker, and assigning a unique passive data port for the thread to use, to allow for multiple users to use the server at once. When the server exits, it closes the socket and terminates.
+
+\subsection{ftpWorker}
+The ftpWorker class builds on the built-in Java Thread class, which allows this FTP Server implementation to become a multi-threaded implementation, that is able to serve more than one user concurrently by using multiple ftpWorkers. The ftpWorker class is constructed by saving the Socket and port number that has been assigned to the worker from the main ftpServer class. When the thread is called, the run function is executed, which created a BufferedReader and PrintWriter around the control socket, and then holds in a while loop that waits for new commands, using the runCmd function.
+
+Upon receiving a new line from the socket, which is controlled by the BufferedReader to receive an entire line at once, runCmd parses the input to extract the FTP command and the arguments, which is then passed to a switch function to match to either the USER, PASS, REIN, QUIT, PORT, or PASV command, and send to their respective helper functions. If none of these commands are matched, the command and arguments are passed to the runCmdAuth function. By using two functions for command parsing, strict log in enforcement can be accomplished, since only user authentication commands can be parsed by runCmd, and any further commands need to be parsed by runCmdAuth, which checks to see whether the user is authenticated or not.
+
+runCmdAuth parses the remaining commands, CWD, DELE, LIST, MDTM, MKD, NLST, PWD, RETR, RMD, RNFR, RNTO, SIZE, STOR, and TYPE. However, before these commands are parsed and sent to their respective helper functions, the currentUserStatus variable is checked, which checks whether the user whether the user is logged in (authenticated), in the process or logging in (authenticating), or not logged in (anonymous). If the user is logged in, the command arguments are passed to the respective helper functions for each of the commands, while if the user is not logged in, a '530 Not logged in' message is sent instead, forcing the user to log in before they are allowed access to the FTP server files.
+
+The file handling for the FTP server is done using a jailed path, and a current path, which are stored individually, and only the current path is modified by the CWD command, preventing the FTP server from accessing files stored outside the jailed path. Most of the file handling is done using Java's built-in File class, for which the file paths are generated from the jailed path, current path, and command arguments.
+
+In addition to the command helper functions discussed in the next section, there are also a few generic helper functions that are used in the implementation, sendCtrlMsg, sendDataMsg, sendDebugMsg, openPassiveDataConnection, openActiveDataConnection, and closeDataConnection.
+
+\subsubsection{sendCtrlMsg}
+sendCtrlMsg is a simple function that sends the chosen message as an ASCII string to the control port using the PrintWriter object that is attached to the control socket.
+
+\subsubsection{sendDataMsg}
+sendDataMsg is a simple function that checks whether a data socket exists and is open, before sending the chosen message as an ASCII string to the data port using the PrintWriter object that is attached to the data socket by either openPassiveDataConnection, or openActiveDataConnection.
+
+\subsubsection{sendDebugMsg}
+sendDebugMsg is a simple function that writes the chosen message to the System console, with some identification information to identify which thread is sending which debug message, in case multiple users are using the FTP server at once.
+
+\subsubsection{openPassiveDataConnection}
+openPassiveDataConnection creates a new ServerSocket on the chosen data port that is assigned from the ftpServer class described earlier, then waits for a connection attempt, and assigns a new PrintWriter to the data socket in question.
+
+\subsubsection{openActiveDataConnection}
+openActiveDataConnection creates a new Socket based on the IP address and port passed to that function, then creates a new PrintWriter to the newly created data socket.
+
+\subsubsection{closeDataConnection}
+closeDataConnection closes the PrintWriter object assigned to the data socket, flushing the last information in case it is not transmitted, then closing the data socket, and in the case of a passive data connection, closes the ServerSocket as well.
 
 \section{Commands}
+Each of the commands uses a helper function that is responsible for parsing the arguments sent to each command, and executing the tasks required of each command. A description of the implementation for each of the commands is done below.
 
-\section{Multi-Threaded Implementation}
+\subsection{CWD}
+The cwdHandler function is called from the runCmdAuth function, and parses the arguments sent when the CWD command is received. The cwdHandler function first checks to see whether the argument is equal to '..', and if so, calculates the parent directory of the current path and changes the current path to that directory. Otherwise, if the argument is not null and not equal to '.', the target path is created from the jailed path, current path, and command argument, and a new File object is created at that path.
 
-\nocite{}
+If this new File object both exists and is a directory, the current path is set to this new current path, and the server replies with a '250' message indicating the current path. Otherwise, the server replies with a '550' message indicating that the current directory cannot be found.
+
+\subsection{DELE}
+The deleHandler function is called from the runCmdAuth function, and parses the arguments sent when the DELE command is received. The deleHandler first ensures that there is an argument, otherwise a '501 No file name given' message is sent to the client. Afterwords, the full path of the file is created from the jailed path, current path, and argument, and a new File object is created at this path.
+
+If this new File object exists and is a file, then the File.delete() function is called, and a '250 File removed' message is sent, otherwise, a '550 File does not exist' message is sent to a client.
+
+\subsection{LIST}
+The listHandler function is called from the runCmdAuth function, and parses the arguments sent when the LIST command is received. Due to the complex nature of the /bin/ls format typically used by FTP servers, it instead uses the same format as the NLST command, and as such, merely passes the arguemnt to the nlstHandler function described later.
+
+\subsection{MDTM}
+The mdtmHandler function is called from the runCmdAuth function, and parses the arguments sent when the MDTM command is received. If the argument is not set, the function sends a '501 No file name given' reply to the client, and exists, while if a argument is given, the full path of the file location is constructed from the jailed path, current path, and command argument. If the file exists, the server creates a new SimpleDateFormat object to format the time in the format required by FTP clients, and passes the File.lastModified() command to the SimpleDateFormat object. This creates a string that can be sent to the client in a '213' reply. However, if the file does not exist or is a directory, the server replies with a '550 File does not exist' message.
+
+\subsection{MKD}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+
+\subsection{NLST}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+
+\subsection{PASS}
+The passHandler function is called from the runCmd function, and parses the arguments sent when the PASS command is received. The passHandler function checks whether the command argument is equal to the valid password set in the 'password' variable, and whether the currentUserStatus is authenticating. If so, the currentUserStatus is set to authenticated, and the server replies with a '230 Welcome' message. otherwise, if the currentUserStatus is already authenticated, the server replies with a '202 User already logged in' message, and a '530 Not logged in' message otherwise.
+
+\subsection{PASV}
+The pasvHandler function is called from the runCmd function, and parses the arguments sent when the PASV command is received. The pasvHandler generates the reply message based on the server's current IP address, typically 127.0.0.1, and the data port assigned by the ftpServer class, before sending a '227 Entering Passive Mode' command with the IP address and data port to the client. The function then calls the openPassiveDataConnection command with the chosen data port.
+
+\subsection{PORT}
+The portHandler function is called from the runCmd function, and parses the arguments sent when the PORT command is received. The portHandler function decodes the command argument into an IP address and data port, then calls the openActiveDataConnection function with the derived IP address and data port, before sending a '200 Command OK' message to the client.
+
+\subsection{PWD}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+
+\subsection{QUIT}
+The quitHandler function is called from the runCmd function, and parses the arguments sent when the QUIT command is received. The function sends a '221 Closing connection' message, then sets the exitFlag to true, which forces the breaks the while loop that the ftpWorker uses to keep checking for new commands.
+
+\subsection{REIN}
+The reinHandler function is called from the runCmd function, and parses the arguments sent when the REIN command is received. The reinHandler function resets the currentUserStatus variable to the anonymous (not logged in) status, before replying with a '220 OK' message.
+
+\subsection{RETR}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+
+\subsection{RMD}
+The rmdHandler function is called from the runCmdAuth function, and parses the arguments sent when the RMD command is received. The function parses the argument, and ensures that it is both not null, and contains only accepted characters, before constructing the full path from the jailed path, current path, and command argument. If the file name is invalid, a '550 invalid name' reply is sent and the function exits. A new File object is created with this path, and if the File object exists and is a directory, it is then deleted, with the server sending a '250 Directory removed', while if it does not exist, or is a file, then a '550 Requested action not taken. Directory unavailable' reply is sent.
+
+\subsection{RNFR}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+
+\subsection{RNTO}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+
+\subsection{SIZE}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received. If the argument is not set, the function sends a '501 No file name given' reply to the client, and exists, while if a argument is given, the full path of the file location is constructed from the jailed path, current path, and command argument. If the file exists, the server calculates the size of the file using the File.length() function, then sends a '213' reply with the file size, while if the file does not exist or is a directory, the server replies with a '550 File does not exist' message.
+
+\subsection{STOR}
+The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+
+\subsection{TYPE}
+The typeHandler function is called from the runCmdAuth function, and parses the arguments sent when the TYPE command is received. There is a flag in the ftpWorker class called the binaryFlag, which represents whether the data should be transferred as an ASCII file, or as a binary file, for STOR and RETR commands. If the argument is equal to either 'A' or 'A N', the binaryFlag is set to false, and the STOR \& RETR commands transmit in ASCII mode, while if the argument is equal to 'I' or 'L 8', the binaryFlag is set to true, and the STOR \& RETR commands transmit in binary mode. A '200 OK' message is sent if the command is successfully received, while if any other arguments are received, a '504 Not OK' message is sent to show that the argument is not valid.
+
+\subsection{USER}
+The userHandler function is called from the runCmd function, and parses the arguments sent when the USER command is received. The userHandler function checks whether the command argument is equal to the valid user name defined in the 'username' variable, and if true, replies with a '331 User name okay, need password' message, and updates the CurrentUserStatus variable to authenticating (in the process of logging in), otherwise, if the user is already logged in (currentUserStatus is authenticated), a '202 User already logged in' message is sent, and if not, a '530 Not logged in' message is sent.
+
+\nocite{*}
+
+\clearpage
+\bibliographystyle{IEEEtran}
+\raggedright
+\bibliography{report.bib}
 
 \end{document}

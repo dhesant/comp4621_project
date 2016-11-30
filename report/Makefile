@@ -35,4 +35,3 @@ nobib:
 	pdflatex ${filename}
 	pdflatex ${filename}
 	pdflatex ${filename}
-	
