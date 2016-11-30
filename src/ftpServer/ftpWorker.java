@@ -31,7 +31,7 @@ public class ftpWorker extends Thread {
 	}
 
 	// Path variables
-	private String jailedDir = "/home/dhesant/ftp_share";
+	private String jailedDir = "./share";
 	private String currentDir = "/";
 	private String fileSeparator = "/";			
 	
@@ -154,10 +154,6 @@ public class ftpWorker extends Thread {
 		
 		else {
 			switch (cmd) {
-			case "ABOR":
-				aborHandler(args);
-				break;
-
 			case "CWD":
 				cwdHandler(args);
 				break;
@@ -316,10 +312,6 @@ public class ftpWorker extends Thread {
 			e.printStackTrace();
 			sendDebugMsg("Could not close data connection");
 		}
-	}
-	
-	private void aborHandler(String str) {
-
 	}
 
 	private void cwdHandler(String str) {
