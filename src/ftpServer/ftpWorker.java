@@ -602,7 +602,7 @@ public class ftpWorker extends Thread {
 						sendDebugMsg("Could not close file streams for file " + filename);
 					}
 
-					sendCtrlMsg("226 File transfer successful. Closing data connection.");
+					sendCtrlMsg("226 Transfer complete");
 				}
 				
 				// ASCII mode
@@ -640,7 +640,7 @@ public class ftpWorker extends Thread {
 						e.printStackTrace();
 						sendDebugMsg("Could not close file streams for file " + filename);
 					}
-                    sendCtrlMsg("226 File transfer successful. Closing data connection.");
+                    sendCtrlMsg("226 Transfer complete");
 				}
 				closeDataConnection();
 			}
@@ -825,7 +825,7 @@ public class ftpWorker extends Thread {
 						sendDebugMsg("Could not close file streams for file " + filename);
 					}
 
-					sendCtrlMsg("226 File transfer successful. Closing data connection.");
+					sendCtrlMsg("226 Transfer complete");
 				}
 				
 				// ASCII mode
@@ -863,7 +863,7 @@ public class ftpWorker extends Thread {
 						e.printStackTrace();
 						sendDebugMsg("Could not close file streams for file " + filename);
 					}
-                    sendCtrlMsg("226 File transfer successful. Closing data connection.");
+                    sendCtrlMsg("226 Transfer complete");
 				}
 				closeDataConnection();
 			}
@@ -893,7 +893,7 @@ public class ftpWorker extends Thread {
 		}
 		
 		else if (currentUserStat == userStat.AUTHENTICATED) {
-			sendCtrlMsg("530 User already logged in");
+			sendCtrlMsg("202 User already logged in");
 		}
 		
 		else {
