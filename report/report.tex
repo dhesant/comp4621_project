@@ -2,6 +2,7 @@
 
 \usepackage{IEEEtrantools}
 \usepackage{float}
+\usepackage[nottoc,notlof,notlot,numbib,section]{tocbibind} % Fix TOC
 
 % Fix URLs
 \usepackage{url}
@@ -40,6 +41,10 @@ The file handling for the FTP server is done using a jailed path, and a current 
 
 In addition to the command helper functions discussed in the next section, there are also a few generic helper functions that are used in the implementation, sendCtrlMsg, sendDataMsg, sendDebugMsg, openPassiveDataConnection, openActiveDataConnection, and closeDataConnection.
 
+\subsubsection{Authentication}
+Authentication is handled by a state variable currentUserStatus, it has 3 different states, anonymous, authenticating, and authenticated. The anonymous state is when neither a valid user name nor password has been accepted by the serer. The authenticating state is when a valid user name, but not a valid password has been accepted by the server. The authenticated state is when a valid user name and password has been received by the server, therefore allowing the user full access to the server.
+
+
 \subsubsection{sendCtrlMsg}
 sendCtrlMsg is a simple function that sends the chosen message as an ASCII string to the control port using the PrintWriter object that is attached to the control socket.
 
@@ -72,16 +77,20 @@ The deleHandler function is called from the runCmdAuth function, and parses the 
 If this new File object exists and is a file, then the File.delete() function is called, and a '250 File removed' message is sent, otherwise, a '550 File does not exist' message is sent to a client.
 
 \subsection{LIST}
-The listHandler function is called from the runCmdAuth function, and parses the arguments sent when the LIST command is received. Due to the complex nature of the /bin/ls format typically used by FTP servers, it instead uses the same format as the NLST command, and as such, merely passes the arguemnt to the nlstHandler function described later.
+The listHandler function is called from the runCmdAuth function, and parses the arguments sent when the LIST command is received. Due to the complex nature of the /bin/ls format typically used by FTP servers, it instead uses the same format as the NLST command, and as such, merely passes the argument to the nlstHandler function described later.
 
 \subsection{MDTM}
 The mdtmHandler function is called from the runCmdAuth function, and parses the arguments sent when the MDTM command is received. If the argument is not set, the function sends a '501 No file name given' reply to the client, and exists, while if a argument is given, the full path of the file location is constructed from the jailed path, current path, and command argument. If the file exists, the server creates a new SimpleDateFormat object to format the time in the format required by FTP clients, and passes the File.lastModified() command to the SimpleDateFormat object. This creates a string that can be sent to the client in a '213' reply. However, if the file does not exist or is a directory, the server replies with a '550 File does not exist' message.
 
 \subsection{MKD}
-The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+The mkdHandler function is called from the runCmdAuth function, and parses the arguments sent when the MKD command is received. The function parses the argument, and ensures that it is both not null, and contains only accepted characters, before constructing the full path from the jailed path, current path, and command argument. If the file name is invalid, a '550 invalid name' reply is sent and the function exits. A new File object is created with this path, and if the File object does not exist, then a new directory is created at the location with the File.mkdir() function. The server then sends a '250 Directory successfully created' reply if it is successful, and if not, a '550 Failed to create directory' reply is sent instead.
 
 \subsection{NLST}
-The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+The nlstHandler function is called from the runCmdAuth function, and parses the arguments sent when the NLST command is received. The nlstHandler function first ensures that there is a socket ready to sent the data, and if not, send a '425 No data connection was established' message to the client.
+
+The directory list is created using the nlstHelper function, and if the directory list is null, then a '550 File does not exist' message is sent to the client, otherwise, the directory list is sent over the data connection using the sendDataMsg function described earlier, followed by a '226 Transfer complete' message.
+
+The nlstHelper function parses the command argument and creates a full path based on the jailed path, current path, and command argument, and creates a new File object at this path. If the File object exists and is a directory, the nlstHelper function returns the output from the File.list() function. If the File object exists and is a file, then a new list is created with the only entry being the File.getName() string. Otherwise, a null list is returned.
 
 \subsection{PASS}
 The passHandler function is called from the runCmd function, and parses the arguments sent when the PASS command is received. The passHandler function checks whether the command argument is equal to the valid password set in the 'password' variable, and whether the currentUserStatus is authenticating. If so, the currentUserStatus is set to authenticated, and the server replies with a '230 Welcome' message. otherwise, if the currentUserStatus is already authenticated, the server replies with a '202 User already logged in' message, and a '530 Not logged in' message otherwise.
@@ -93,7 +102,7 @@ The pasvHandler function is called from the runCmd function, and parses the argu
 The portHandler function is called from the runCmd function, and parses the arguments sent when the PORT command is received. The portHandler function decodes the command argument into an IP address and data port, then calls the openActiveDataConnection function with the derived IP address and data port, before sending a '200 Command OK' message to the client.
 
 \subsection{PWD}
-The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+The pwdHandler function is called from the runCmdAuth function, and parses the arguments sent when the PWD command is received. The pwdHandler function simply sends a '257' message to the client with the current path, which can be read from the current path variable CurrentDir.
 
 \subsection{QUIT}
 The quitHandler function is called from the runCmd function, and parses the arguments sent when the QUIT command is received. The function sends a '221 Closing connection' message, then sets the exitFlag to true, which forces the breaks the while loop that the ftpWorker uses to keep checking for new commands.
@@ -102,22 +111,34 @@ The quitHandler function is called from the runCmd function, and parses the argu
 The reinHandler function is called from the runCmd function, and parses the arguments sent when the REIN command is received. The reinHandler function resets the currentUserStatus variable to the anonymous (not logged in) status, before replying with a '220 OK' message.
 
 \subsection{RETR}
-The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+The retrHandler function is called from the runCmdAuth function, and parses the arguments sent when the RETR command is received. The retrHandler function first ensures that the command argument exists, otherwise returning a '501 No file name given' message. Otherwise, it uses the jailed path, current path, and command argument to create a full path for the given file, and create a new File object at this path.
+
+Using the new File object, the function then checks whether the file exists, returning a '550 File does not exist' message if it does not. If it does exist, it then proceeds to check whether a data connection has been opened or not, returning a '425 No data connection was established' message if it was not.
+
+Depending on the binaryFlag, the file is either sent as ASCII text, or binary data. In the binaryFlag is set, then a binary data transfer is initiated. To do this, a new BufferdInputStream is connected to a new FileInputStream on the File object defined earlier, and a new BufferedOutputStream is created on the data socket. Then, 1024 bytes of data are read from the BufferedInputStream connected to the target file, and sent to the data socket via the BufferedOutputStream. This repeated until the entire file is read. Finally, the various streams and data sockets are closed, and a '226 Transfer complete' message is sent to the client.
+
+If the binaryFlag is not sent, an ASCII data transfer is initiated, and a BufferedReader is attached to a FileReader on the File object defined earlier, and a PrintWriter is attached to the opened data socket. Then, each line is read from the BufferedReader and written to the PrintWriter, sending it to the data socket. This is repeated for the entirety of the file. Finally, the various streams and data sockets are closed, and a '226 Transfer complete' message is sent to the client.
 
 \subsection{RMD}
 The rmdHandler function is called from the runCmdAuth function, and parses the arguments sent when the RMD command is received. The function parses the argument, and ensures that it is both not null, and contains only accepted characters, before constructing the full path from the jailed path, current path, and command argument. If the file name is invalid, a '550 invalid name' reply is sent and the function exits. A new File object is created with this path, and if the File object exists and is a directory, it is then deleted, with the server sending a '250 Directory removed', while if it does not exist, or is a file, then a '550 Requested action not taken. Directory unavailable' reply is sent.
 
 \subsection{RNFR}
-The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+The rnfrHandler function is called from the runCmdAuth function, and parses the arguments sent when the RNFR command is received. The rnfrHandler function ensures that the argument is not empty, otherwise it sends a '501 No file name given' reply. It then creates a full path for the file, based on the jailed path, current path, and command argument, and sets the class variable renameFile to a File object with this path. If the File object exists and is a file, then a '220 OK' message is sent to the client, and the server is ready to receive a RNTO command. Otherwise, the renameFile variable is set to null, and a '550 File does not exist' message is sent to the client.
 
 \subsection{RNTO}
-The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+The rntoHandler function is called from the runCmdAuth function, and parses the arguments sent when the RNTO command is received. The rntoHandler function ensures that the argument is not empty, otherwise it sends a '501 No file name given' reply to the client. It then makes sure that the renameFile object is not null, otherwise it sends a '550 File does not exist' reply to the client. It then creates the full path for the target file, based on the jailed path, current path, and command argument, and creates a new File object with this path. It then ensures that the File object does not point to an existing file, otherwise it sends a '550 File already exists' reply to the client. Finally, it uses the File class renameTo function to rename the renameFile object saved from the RNFR command to the new File object defined in this function, sending a '213 Renamed File to NewFile' message on a successful rename, or a '550 Cannot rename file' if an error has occurred.
 
 \subsection{SIZE}
 The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received. If the argument is not set, the function sends a '501 No file name given' reply to the client, and exists, while if a argument is given, the full path of the file location is constructed from the jailed path, current path, and command argument. If the file exists, the server calculates the size of the file using the File.length() function, then sends a '213' reply with the file size, while if the file does not exist or is a directory, the server replies with a '550 File does not exist' message.
 
 \subsection{STOR}
-The sizeHandler function is called from the runCmdAuth function, and parses the arguments sent when the SIZE command is received.
+The storHandler function is called from the runCmdAuth function, and parses the arguments sent when the STOR command is received. The storHandler function first ensures that the command argument exists, otherwise returning a '501 No file name given' message. Otherwise, it uses the jailed path, current path, and command argument to create a full path for the given file, and create a new File object at this path.
+
+Using the new File object, the function then checks whether the file exists, returning a '550 File alreayd exist' message if it does. If it does not exist, it then proceeds to check whether a data connection has been opened or not, returning a '425 No data connection was established' message if it was not.
+
+Depending on the binaryFlag, the file is either sent as ASCII text, or binary data. In the binaryFlag is set, then a binary data transfer is initiated. To do this, a new BufferdInputStream is connected to the data socket, and a new BufferedOutputStream is created on a FileOutputStream on the File object defined earlier. Then, 1024 bytes of data are read from the BufferedInputStream connected to the data socket, and are written to the new File via the BufferedOutputStream. This repeated until the entire file is saved. Finally, the various streams and data sockets are closed, and a '226 Transfer complete' message is sent to the client.
+
+If the binaryFlag is not sent, an ASCII data transfer is initiated, and a BufferedReader is attached to an InputStreamReader connected to the data socket, and a PrintWriter is attached to a FileOutputStream connected to the File object defined earlier. Then, each line is read from the BufferedReader and written to the PrintWriter, sending it from the data socket to the new file. This is repeated for the entirety of the file. Finally, the various streams and data sockets are closed, and a '226 Transfer complete' message is sent to the client.
 
 \subsection{TYPE}
 The typeHandler function is called from the runCmdAuth function, and parses the arguments sent when the TYPE command is received. There is a flag in the ftpWorker class called the binaryFlag, which represents whether the data should be transferred as an ASCII file, or as a binary file, for STOR and RETR commands. If the argument is equal to either 'A' or 'A N', the binaryFlag is set to false, and the STOR \& RETR commands transmit in ASCII mode, while if the argument is equal to 'I' or 'L 8', the binaryFlag is set to true, and the STOR \& RETR commands transmit in binary mode. A '200 OK' message is sent if the command is successfully received, while if any other arguments are received, a '504 Not OK' message is sent to show that the argument is not valid.
@@ -125,9 +146,30 @@ The typeHandler function is called from the runCmdAuth function, and parses the 
 \subsection{USER}
 The userHandler function is called from the runCmd function, and parses the arguments sent when the USER command is received. The userHandler function checks whether the command argument is equal to the valid user name defined in the 'username' variable, and if true, replies with a '331 User name okay, need password' message, and updates the CurrentUserStatus variable to authenticating (in the process of logging in), otherwise, if the user is already logged in (currentUserStatus is authenticated), a '202 User already logged in' message is sent, and if not, a '530 Not logged in' message is sent.
 
-\nocite{*}
+\section{Multi-threading}
+Using the ftpWorker class, which is an extension of the Thread class, the FTP server is able to serve multiple clients at once by launching multiple workers are different threads, and is therefore a multi-threaded implementation of an FTP server. This can be seen in the following system log. There are 3 different clients connecting to the main FTP server, on three different ftpWorker threads, 9, 10, and 11. As is evident from below, the server is able to open and maintain connections to each of the three clients.
+
+\begin{verbatim}
+  FTP Server started on port 2121.
+  ftpWorker 9: Command: USER Args: comp4621
+  ftpWorker 9: Command: PASS Args: comp4621
+  ftpWorker 9: Command: SYST Args: null
+  ftpWorker 10: Command: USER Args: comp4621
+  ftpWorker 10: Command: PASS Args: comp4621
+  ftpWorker 10: Command: SYST Args: null
+  ftpWorker 11: Command: USER Args: comp4621
+  ftpWorker 11: Command: PASS Args: comp4621
+  ftpWorker 11: Command: SYST Args: null
+  ftpWorker 9: Command: PORT Args: 127,0,0,1,197,246
+  ftpWorker 9: Opened Active Data Connection
+  ftpWorker 9: Command: LIST Args: null
+  ftpWorker 9: Data connection was closed
+  ftpWorker 10: Command: MKD Args: dir4
+  ftpWorker 11: Command: RMD Args: dir8
+\end{verbatim}
 
 \clearpage
+\nocite{*}
 \bibliographystyle{IEEEtran}
 \raggedright
 \bibliography{report.bib}
